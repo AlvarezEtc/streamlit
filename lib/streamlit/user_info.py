@@ -100,9 +100,7 @@ def login(provider: str | None = None) -> None:
         - You must install ``Authlib>=1.3.2`` to use this command. You can
           install it as an extra with Streamlit:
 
-          .. code-block:: shell
-
-             pip install streamlit[auth]
+          >>> pip install streamlit[auth]
 
         - Your authentication configuration is dependent on your host location.
           When you deploy your app, remember to update your ``redirect_uri``
@@ -379,6 +377,37 @@ def _get_user_info() -> UserInfo:
     return context_user_info
 
 
+class TokensProxy(Mapping[str, str]):
+    """A read-only, dict-like object for accessing exposed tokens."""
+
+    def __init__(self, tokens: dict[str, str]) -> None:
+        self._tokens = tokens
+
+    def __getitem__(self, key: str) -> str:
+        return self._tokens[key]
+
+    def __getattr__(self, key: str) -> str:
+        try:
+            return self._tokens[key]
+        except KeyError:
+            raise AttributeError(f'Token "{key}" is not exposed or does not exist.')
+
+    def __setattr__(self, name: str, value: str | None) -> NoReturn:
+        if name.startswith("_"):
+            super().__setattr__(name, value)
+        else:
+            raise StreamlitAPIException("st.user.tokens cannot be modified")
+
+    def __setitem__(self, name: str, value: str | None) -> NoReturn:
+        raise StreamlitAPIException("st.user.tokens cannot be modified")
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._tokens)
+
+    def __len__(self) -> int:
+        return len(self._tokens)
+
+
 class UserInfoProxy(Mapping[str, Union[str, bool, None]]):
     """
     A read-only, dict-like object for accessing information about the current\
@@ -490,13 +519,17 @@ class UserInfoProxy(Mapping[str, Union[str, bool, None]]):
     >>> }
     """
 
-    def __getitem__(self, key: str) -> str | bool | None:
+    def __getitem__(self, key: str) -> str | bool | None | TokensProxy:
+        if key == "tokens":
+            return self.tokens
         try:
             return _get_user_info()[key]
         except KeyError:
             raise KeyError(f'st.user has no key "{key}".')
 
-    def __getattr__(self, key: str) -> str | bool | None:
+    def __getattr__(self, key: str) -> str | bool | None | TokensProxy:
+        if key == "tokens":
+            return self.tokens
         try:
             return _get_user_info()[key]
         except KeyError:
@@ -528,6 +561,12 @@ class UserInfoProxy(Mapping[str, Union[str, bool, None]]):
             A dictionary of the current user's information.
         """
         return _get_user_info()
+
+    @property
+    def tokens(self) -> TokensProxy:
+        """Access exposed tokens via a dict-like object."""
+        user_info = _get_user_info()
+        return TokensProxy(user_info.get("tokens", {}))
 
 
 has_shown_experimental_user_warning = False

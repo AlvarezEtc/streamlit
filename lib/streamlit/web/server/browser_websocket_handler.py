@@ -28,12 +28,14 @@ from tornado.escape import utf8
 from tornado.websocket import WebSocketHandler
 
 from streamlit import config
+from streamlit.auth_util import get_expose_tokens_config
 from streamlit.logger import get_logger
 from streamlit.proto.BackMsg_pb2 import BackMsg
 from streamlit.runtime import Runtime, SessionClient, SessionClientDisconnectedError
 from streamlit.runtime.runtime_util import serialize_forward_msg
 from streamlit.web.server.server_util import (
     AUTH_COOKIE_NAME,
+    TOKENS_COOKIE_NAME,
     is_url_from_allowed_origins,
     is_xsrf_enabled,
 )
@@ -171,6 +173,21 @@ class BrowserWebSocketHandler(WebSocketHandler, SessionClient):
                 if self._validate_xsrf_token(csrf_protocol_value):
                     user_info.update(self._parse_user_cookie(raw_cookie_value))
 
+                    # Also read in tokens if token cookie exists
+                    raw_token_cookie_value = self.get_signed_cookie(TOKENS_COOKIE_NAME)
+                    if raw_token_cookie_value:
+                        all_tokens = json.loads(raw_token_cookie_value)
+
+                        # Filter tokens based on expose_tokens configuration
+                        expose_tokens = get_expose_tokens_config()
+                        filtered_tokens = {}
+                        for token_type in expose_tokens:
+                            token_key = f"{token_type}_token"
+                            if token_key in all_tokens:
+                                filtered_tokens[token_type] = all_tokens[token_key]
+
+                        user_info["tokens"] = filtered_tokens
+
             if len(ws_protocols) >= 3:
                 # See the NOTE in the docstring of the `select_subprotocol` method above
                 # for a detailed explanation of why this is done.
@@ -179,21 +196,6 @@ class BrowserWebSocketHandler(WebSocketHandler, SessionClient):
             # Just let existing_session_id=None if we run into any error while trying to
             # extract it from the Sec-Websocket-Protocol header.
             pass
-
-        # Map in any user-configured headers. Note that these override anything coming
-        # from the auth cookie.
-        mapping_config = config.get_option("server.trustedUserHeaders")
-        for header_name, user_info_key in mapping_config.items():
-            header_values = self.request.headers.get_list(header_name)
-            if header_values:
-                # If there's at least one value, use the first value.
-                # NOTE: Tornado doesn't document the order of these values, so it's
-                # possible this won't be the first value that was received by the
-                # server.
-                user_info[user_info_key] = header_values[0]
-            else:
-                # Default to explicit None.
-                user_info[user_info_key] = None
 
         self._session_id = self._runtime.connect_session(
             client=self,
