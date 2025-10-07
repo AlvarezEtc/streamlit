@@ -95,8 +95,6 @@ class AuthHandlerMixin(tornado.web.RequestHandler):
                 serialized_cookie_value,
                 httpOnly=True,
             )
-
-            self.set_signed_cookie("TOKENS_COOKIE_NAME", f"{serialized_cookie_value}")
         except AttributeError:
             self.set_secure_cookie(
                 cookie_name,
