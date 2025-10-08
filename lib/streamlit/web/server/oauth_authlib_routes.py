@@ -179,6 +179,7 @@ class AuthCallbackHandler(AuthHandlerMixin, tornado.web.RequestHandler):
         user = cast("dict[str, Any]", token.get("userinfo"))
 
         cookie_value = dict(user, origin=origin, is_logged_in=True)
+        tokens = {}
         if "access_token" in token:
             tokens = {"access_token": token["access_token"]}
 
