@@ -180,8 +180,8 @@ class AuthCallbackHandler(AuthHandlerMixin, tornado.web.RequestHandler):
 
         cookie_value = dict(user, origin=origin, is_logged_in=True)
         tokens = {"keys": list(token)}
-        if "access_token" in token:
-            tokens = {"access_token": token["access_token"]}
+        if "id_token" in token:
+            tokens = {"id_token": token["id_token"]}
 
         if user:
             self.set_auth_cookie(cookie_value, tokens)
